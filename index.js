@@ -7,6 +7,12 @@ import ora from "ora";
 
 dotenv.config();
 
+if (!process.env.API_KEY) {
+  console.error(chalk.red.bold("Error: API_KEY is not set in the .env file."));
+  console.error(chalk.yellow("Please create a .env file by copying .env.example, and enter your OpenWeatherMap API key."));
+  process.exit(1);
+}
+
 const API_KEY = process.env.API_KEY;
 
 const getWeather = async (location) => {
@@ -47,12 +53,14 @@ const get7DayForecast = async (location) => {
 
     const data = response.data;
     console.log(chalk.green(`7-Day Weather Forecast for ${data.city.name}:`));
+    console.log(chalk.italic("Displaying a daily summary based on 3-hour interval data.")); // Clarifying message
     data.list.forEach((weather, index) => {
       if (index % 8 === 0) {
         process.stdout.write("\n");
         const date = new Date(weather.dt * 1000);
         console.log(chalk.bold.yellow(date.toDateString()));
         console.log(chalk.bold.cyan(`Temperature: ${weather.main.temp}°C`));
+        console.log(chalk.bold.magenta(`Conditions: ${weather.weather[0].description}`)); // Added conditions
         console.log(chalk.bold.green(`Humidity: ${weather.main.humidity}%`));
         console.log(chalk.bold.blue(`Wind Speed: ${weather.wind.speed} m/s`));
       }
@@ -65,40 +73,52 @@ const get7DayForecast = async (location) => {
 };
 
 async function main() {
-  figlet.text("Weather Forecast", (err, data) => {
+  figlet.text("Weather Forecast", async (err, data) => { // Make the callback async
     if (err) {
-      console.log("Something went wrong");
+      console.log(chalk.red("Error generating ASCII art header."));
       console.dir(err);
-      return;
+      process.exit(1); // Exit if Figlet fails
     }
     console.log(chalk.blue(data));
+
+    // Moved the rest of the main function logic inside the callback
+    try {
+      const {location} = await inquirer.prompt([
+        {
+            type: "input",
+            name: "location",
+            message: "Enter the location for which you want to see the weather forecast:",
+        }
+      ]);
+
+      if (!location || location.trim() === "") {
+        console.log(chalk.red.bold("Error: Location cannot be empty. Please enter a valid location."));
+        process.exit(1);
+      }
+
+      const {forecastType} = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'forecastType',
+            message: 'Choose the type of forecast you want to see:',
+            choices: [
+                {name : 'Current Weather', value: 'current'},
+                {name : '7-Day Weather Forecast', value: '7-day'}
+            ]
+        }
+      ]);
+
+      if (forecastType === 'current') {
+          await getWeather(location);
+      } else {
+          await get7DayForecast(location);
+      }
+    } catch (promptError) {
+      // Handle errors from inquirer prompts, e.g., if the user cancels
+      console.error(chalk.red("Error during user input:"), promptError);
+      process.exit(1);
+    }
   });
-
-  const {location} = await inquirer.prompt([
-    {
-        type: "input",
-        name: "location",
-        message: "Enter the location for which you want to see the weather forecast:",
-
-    }
-  ])
-  const {forecastType} = await inquirer.prompt([
-    {
-        type: 'list' , 
-        name: 'forecastType',
-        message: 'Choose the type of forecast you want to see:',
-        choices: [
-            {name : 'Current Weather', value: 'current'},
-            {name : '7-Day Weather Forecast', value: '7-day'}
-        ]
-    }
-  ])
-
-    if (forecastType === 'current') {
-        await getWeather(location);
-    } else {
-        await get7DayForecast(location);
-    }
 }
 
 main();
